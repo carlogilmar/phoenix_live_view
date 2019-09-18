@@ -74,146 +74,21 @@ defmodule Phoenix.LiveView.Rendered do
 end
 
 defmodule Phoenix.LiveView.Engine do
-  @moduledoc ~S"""
-  The `.leex` (Live EEx) template engine that tracks changes.
-
-  On the docs below, we will explain how it works internally.
-  For user-facing documentation, see `Phoenix.LiveView`.
-
-  ## Phoenix.LiveView.Rendered
-
-  Whenever you render a `.leex` template, it returns a
-  `Phoenix.LiveView.Rendered` structure. This structure has
-  three fields: `:static`, `:dynamic` and `:fingerprint`.
-
-  The `:static` field is a list of literal strings. This
-  allows the Elixir compiler to optimize this list and avoid
-  allocating its strings on every render.
-
-  The `:dynamic` field contains a list of dynamic content.
-  Each element in the list is either one of:
-
-    1. iodata - which is the dynamic content
-    2. nil - the dynamic content did not change, see "Tracking changes" below
-    3. another `Phoenix.LiveView.Rendered` struct, see "Nesting and fingerprinting" below
-    4. a `Phoenix.LiveView.Comprehension` struct, see "Comprehensions" below
-
-  When you render a `.leex` template, you can convert the
-  rendered structure to iodata by intercalating the static
-  and dynamic fields, always starting with a static entry
-  followed by a dynamic entry. The last entry will always
-  be static too. So the following structure:
-
-      %Phoenix.LiveView.Rendered{
-        static: ["foo", "bar", "baz"],
-        dynamic: ["left", "right"]
-      }
-
-  Results in the following content to be sent over the wire
-  as iodata:
-
-      ["foo", "left", "bar", "right", "baz"]
-
-  This is also what calling `Phoenix.HTML.Safe.to_iodata/1`
-  with a `Phoenix.LiveView.Rendered` structure returns.
-
-  Of course, the benefit of `.leex` templates is exactly
-  that you do not need to send both static and dynamic
-  segments every time. So let's talk about tracking changes.
-
-  ## Tracking changes
-
-  By default, a `.leex` template does not track changes.
-  Change tracking can be enabled by passing a `socket`
-  with two keys `:fingerprints` and `:changed`. If
-  the `:fingerprints` matches the template fingerprint,
-  then the `:changed` map is used. The map should
-  contain the name of any changed field as key and the
-  boolean true as value. If a field is not listed in
-  `:changed`, then it is always considered unchanged.
-
-  If a field is unchanged and `.leex` believes a dynamic
-  expression no longer needs to be computed, its value
-  in the `dynamic` list will be `nil`. This information
-  can be leveraged to avoid sending data to the client.
-
-  ## Nesting and fingerprinting
-
-  `Phoenix.LiveView` also tracks changes across `.leex`
-  templates. Therefore, if your view has this:
-
-      <%= render "form.html", assigns %>
-
-  Phoenix will be able to track what is static and dynamic
-  across templates, as well as what changed. A rendered
-  nested `.leex` template will appear in the `dynamic`
-  list as another `Phoenix.LiveView.Rendered` structure,
-  which must be handled recursively.
-
-  However, because the rendering of live templates can
-  be dynamic in itself, it is important to distinguish
-  which `.leex` template was rendered. For example,
-  imagine this code:
-
-      <%= if something?, do: render("one.html", assigns), else: render("other.html", assigns) %>
-
-  To solve this, all `Phoenix.LiveView.Rendered` structs
-  also contain a fingerprint field that uniquely identifies
-  it. If the fingerprints are equal, you have the same
-  template, and therefore it is possible to only transmit
-  its changes.
-
-  ## Comprehensions
-
-  Another optimization done by `.leex` templates is to
-  track comprehensions. If your code has this:
-
-      <%= for point <- @points do %>
-        x: <%= point.x %>
-        y: <%= point.y %>
-      <% end %>
-
-  Instead of rendering all points with both static and
-  dynamic parts, it returns a `Phoenix.LiveView.Comprehension`
-  struct with the static parts, that are shared across all
-  points, and a list of dynamics to be interpolated inside
-  the static parts. If `@points` is a list with `%{x: 1, y: 2}`
-  and `%{x: 3, y: 4}`, the expression above would return:
-
-      %Phoenix.LiveView.Comprehension{
-        static: ["\n  x: ", "\n  y: ", "\n"],
-        dynamics: [
-          ["1", "2"],
-          ["3", "4"]
-        ]
-      }
-
-  This allows `.leex` templates to drastically optimize
-  the data sent by comprehensions, as the static parts
-  are emitted once, regardless of the number of items.
-
-  The list of dynamics is always a list of iodatas, as we
-  only perform change tracking at the root and never inside
-  `case`, `cond`, `comprehensions`, etc. Similarly,
-  comprehensions do not have fingerprints because they
-  are only optimized at the root, so conditional evaluation,
-  as the one seen in rendering, is not possible. The only
-  possible outcome for a dynamic field that returns a
-  comprehension is `nil`.
-  """
-
   @behaviour Phoenix.Template.Engine
   @pdict_key {__MODULE__, :fingerprint}
 
   @impl true
   def compile(path, _name) do
-    EEx.compile_file(path, engine: __MODULE__, line: 1, trim: true)
+    IO.puts "0 Iniciando..."
+    compiled =EEx.compile_file(path, engine: __MODULE__, line: 1, trim: true)
+    :finished
   end
 
   @behaviour EEx.Engine
 
   @impl true
   def init(_opts) do
+    IO.puts "1... inicializando este pedo!!"
     %{
       static: [],
       dynamic: [],
@@ -223,11 +98,13 @@ defmodule Phoenix.LiveView.Engine do
 
   @impl true
   def handle_begin(state) do
+    IO.puts "... handle begin..."
     %{state | static: [], dynamic: []}
   end
 
   @impl true
   def handle_end(state) do
+    IO.puts "3... handle end"
     %{static: static, dynamic: dynamic} = state
     safe = {:safe, Enum.reverse(static)}
     {:__block__, [], Enum.reverse([safe | dynamic])}
@@ -235,6 +112,7 @@ defmodule Phoenix.LiveView.Engine do
 
   @impl true
   def handle_body(state) do
+    IO.puts "2. ... handle body..."
     {fingerprint, entries} = to_rendered_struct(handle_end(state), true, false, %{}, %{})
 
     quote do
@@ -263,12 +141,20 @@ defmodule Phoenix.LiveView.Engine do
 
   @impl true
   def handle_text(state, text) do
+    IO.puts "\n>> handle text!!!"
+    IO.inspect state
+    IO.inspect text
+    IO.puts "<< handle text \n"
     %{static: static} = state
     %{state | static: [text | static]}
   end
 
   @impl true
   def handle_expr(state, "=", ast) do
+    IO.puts "<< handle expression 1="
+    IO.inspect state
+    IO.inspect ast
+    IO.puts ">> handle expression 1= \n"
     %{static: static, dynamic: dynamic, vars_count: vars_count} = state
     var = Macro.var(:"arg#{vars_count}", __MODULE__)
     ast = quote do: unquote(var) = unquote(__MODULE__).to_safe(unquote(ast))
@@ -276,11 +162,13 @@ defmodule Phoenix.LiveView.Engine do
   end
 
   def handle_expr(state, "", ast) do
+    IO.puts "handle_expression 2-"
     %{dynamic: dynamic} = state
     %{state | dynamic: [ast | dynamic]}
   end
 
   def handle_expr(state, marker, ast) do
+    IO.inspect "handle_expr 3marker"
     EEx.Engine.handle_expr(state, marker, ast)
   end
 

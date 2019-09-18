@@ -1,0 +1,7 @@
+Hola
+Esto es un template de live view
+<%= name %>
+<%= surname %>
+
+Phoenix
+Terminamos aqui!!!
